@@ -1,0 +1,26 @@
+# default options. Ref: https://github.com/mwhudson/livefs-editor?tab=readme-ov-file#actions
+- arg: autoinstall
+  name: add-cmdline-arg
+  persist: false
+- name: install-pip-packages
+  packages:
+    {% for pip in pip_list %}
+    - {{ pip }}
+    {% endfor %}
+- name: add-apt-repository
+  repositories:
+    {%  for repo in repositories_list %}
+    - {{ repo }}
+    {%  endfor %}
+- name: install-packages
+  packages:
+    {% for apt in apt_list %}
+    - {{ apt }}
+    {% endfor %}
+{% if deb_list|length > 0 %}
+- name: install-debs
+  debs:
+    {% for deb in deb_list %}
+    - {{ deb }}
+    {% endfor %}
+{% endif %}

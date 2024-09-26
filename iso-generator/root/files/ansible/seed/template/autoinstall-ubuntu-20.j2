@@ -1,0 +1,180 @@
+{% if manual_installation | bool %}
+#cloud-config
+autoinstall:
+    version: 1
+    early-commands:
+      - cp /cdrom/ws-auto/configs/clean.py /clean.py
+      - python3 /clean.py
+{% endif %}
+    version: 1
+    refresh-installer: { "update": no }
+    apt:
+      disable_components: []
+      geoip: false
+{% if item.timezone is defined %}
+    timezone: {{ item.timezone }}
+{% else %}
+    timezone: UTC
+{% endif %}
+    ssh:
+      allow-pw: true
+      install-server: true
+    identity:
+      hostname: {{ item.hostname }}
+{% for item in item.users %}{% if loop.first %}
+      password: "{{ item.password | password_hash('sha512') }}"
+      username: {{ item.name }}
+    user-data:
+      users:
+      - name: {{ item.name }}
+        sudo: '{{ item.sudoers }}'
+        shell: /bin/bash
+        lock_passwd: false
+        password: "{{ item.password | password_hash('sha512') }}"
+        ssh_authorized_keys:
+{% for ssh_key in item.authorized_keys %}
+        - {{ ssh_key }}
+{% endfor %}
+{% endif %}{% if not loop.first %}
+      - name: {{ item.name }}
+        sudo: {{ item.sudoers }}
+        shell: /bin/bash
+        lock_passwd: false
+        password: "{{ item.password | password_hash('sha512') }}"
+        ssh_authorized_keys:
+{% for ssh_key in item.authorized_keys %}
+        - {{ ssh_key }}
+{% endfor %}
+{% endif %}
+{% endfor %}
+    storage:
+      swap:
+        size: 0
+      config:
+        # Disk Partition Table
+{% for item in item.storage %}{% for disk in item.disks %}
+        # Disk: {{ disk }}
+        - type: disk
+          id: disk-{{ disk }}
+          path: /dev/{{ disk }}
+          preserve: false
+          grub_device: false
+          wipe: superblock-recursive
+          ptable: gpt
+{% endfor %}{% endfor %}
+        # Partitions UEFI
+{% for item in item.storage %}
+{% if item.boot is defined and item.boot == 'uefi' %}
+{% for disk in item.disks %}
+        # UEFI Disk: {{ disk }}
+        - type: partition
+          id: disk-{{ disk }}-part-uefi
+          device: disk-{{ disk }}
+          flag: boot
+          number: 1
+          grub_device: true
+          size: 1GB
+        # Format UEFI Disk: {{ disk }}
+        - type: format
+          fstype: fat32
+          label: ESP
+          volume: disk-{{ disk }}-part-uefi
+          id: disk-{{ disk }}-format-uefi
+          preserve: false
+{% endfor %}{% endif %}{% endfor %}
+
+{% for item in item.storage %}
+{% if item.raid_type is defined %}
+        # Partitions for RAID
+{% for disk in item.disks %}
+        # Part Disk: {{ disk }}
+        - type: partition
+          id: disk-{{ disk }}-part-raid
+          device: disk-{{ disk }}
+          size: -1
+{% endfor %}{% else %}{% for disk in item.disks %}
+        # Partitions for disks
+        # Part Disk: {{ disk }}
+        - type: partition
+          id: disk-{{ disk }}-part
+          device: disk-{{ disk }}
+          size: -1
+{% endfor %}{% endif %}
+{% endfor %}
+
+{% for item in item.storage %}
+{% if item.raid_type is defined %}
+        # Creates RAID
+        # RAID md{{ loop.index - 1 }} type: {{ item.raid_type }}
+        - type: raid
+          id: md-raid{{ item.raid_type }}-{{ loop.index -1 }}
+          name: md{{ loop.index - 1 }}
+          raidlevel: {{ item.raid_type }}
+          devices:
+{% for disk in item.disks %}
+            - disk-{{ disk }}-part-raid
+{% endfor %}
+{% endif %}
+{% endfor %}
+        # VG's definition
+{% for item in item.storage %}
+        # VG: {{ item.vg_name }}
+        - type: lvm_volgroup
+          id: {{ item.vg_name }}
+          name: {{ item.vg_name }}
+          devices:
+{% if item.raid_type is defined %}
+            - md-raid{{ item.raid_type }}-{{ loop.index -1 }}
+{% else %}{% for disk in item.disks %}
+            - disk-{{ disk }}-part
+{% endfor %}{% endif %}
+{% endfor %}
+        # LV's definition
+{% for item in item.storage %}
+{% for lv in item.lvs %}
+        # LV: {{ lv.name }}
+        - type: lvm_partition
+          id: {{ lv.name }}
+          name: {{ lv.name }}
+          volgroup: {{ item.vg_name }}
+{% if lv.size != -1 %}
+          size: {{ lv.size }}
+{% endif %}
+        # Format LV: {{ lv.name }}
+        - type: format
+          id: {{ lv.name }}-format
+          volume: {{ lv.name }}
+          fstype: {{ lv.fs_type }}
+{% endfor %}
+{% endfor %}
+        # LV's mount
+{% for item in item.storage %}
+{% if item.boot is defined and item.boot == 'uefi' %}
+{% for disk in item.disks %}
+{% if loop.first %}
+        # UEFI mount
+        - type: mount
+          id: uefi-mount
+          path: /boot/efi
+          device: disk-{{ disk }}-format-uefi
+{% endif %}
+{% endfor %}
+{% endif %}
+{% for lv in item.lvs %}
+        # LV {{ lv.name }} -> {{ lv.mount }}
+        - type: mount
+          id: {{ lv.name }}-mount
+          path: {{ lv.mount }}
+          device: {{ lv.name }}-format
+{% endfor %}
+{% endfor %}
+    late-commands:
+        - cp /cdrom/ws-auto/configs/{{ item.management.serial | default(item.hostname) }}/deploy.sh /target/root/.
+        - cp /cdrom/ws-auto/configs/{{ item.management.serial | default(item.hostname) }}/netplan_generator.sh /target/root/.
+{% if item.management is defined and item.management.type == 'ilo' %}
+        - cp /cdrom/ws-auto/configs/{{ item.management.serial | default(item.hostname) }}/hp_user.xml /target/root/.
+{% endif %}
+        - cp -r /cdrom/ws-auto/repository /target/root/.
+        - curtin in-target --target=/target -- cp /root/repository/temp.service /etc/systemd/system/.
+        - curtin in-target --target=/target -- chmod +x /root/deploy.sh /root/netplan_generator.sh
+        - curtin in-target --target=/target -- systemctl enable temp.service

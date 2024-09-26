@@ -1,0 +1,50 @@
+- hosts: 127.0.0.1
+  vars_files:
+    - vars/vars.yml
+  tasks:
+    - name: Deletes iso whit only apt packages
+      command: rm -rf /etc/iso-automator/modified_image
+    - name: "Generating new iso for Ubuntu server 20 in {{ dest_path }}/{{ image_name }}"
+      when: iso_version == "ubuntu-20"
+      shell: >-
+        xorriso -as mkisofs -r -V "ATTENDLESS_UBUNTU" -cache-inodes -J -l -b
+        isolinux/isolinux.bin -c isolinux/boot.cat -b isolinux/isolinux.bin
+        -no-emul-boot -boot-load-size 4 -boot-info-table -eltorito-alt-boot  -e
+        boot/grub/efi.img  -no-emul-boot -isohybrid-gpt-basdat -o "{{ dest_path
+        }}/{{ image_name }}" /mnt/modified_content
+    - name: "Generating new iso for Ubuntu server 22"
+      when: iso_version == "ubuntu-22"
+      block:
+        - name: Capture output from xorriso command
+          command:
+            cmd: "xorriso -indev {{ image }} -report_el_torito as_mkisofs"
+          register: xorriso_output
+          args:
+            chdir: /etc/iso-automator/base_image
+        - name: Parse important parameters from xorriso output
+          set_fact:
+            boot_catalog: >-
+              {{ xorriso_output.stdout | regex_search("-c '/([^']*)'", '\1') | first }}
+            eltorito_img: >-
+              {{ xorriso_output.stdout | regex_search("-b '/([^']*)'", '\1') | first }}
+            iso_mbr_part_type: >-
+              {{ xorriso_output.stdout | regex_search('-iso_mbr_part_type (\w+)', '\1') | first }}
+            append_partition_2_guid: >-
+              {{ xorriso_output.stdout | regex_search('-append_partition 2 (\w+)', '\1') | first }}
+            appended_partition_2_interval: >-
+              {{ xorriso_output.stdout | regex_search('--interval:appended_partition_2_start_\d+s_size_\d+d:all::', '\0') | first }}
+        - name: "Generating new iso for Ubuntu server 22 in {{ dest_path }}/{{ image_name }}"
+          shell: >-
+            xorriso -as mkisofs -r -V "ATTENDLESS_UBUNTU" --grub2-mbr
+            files/1-Boot-NoEmul.img -partition_offset 16 --mbr-force-bootable
+            -append_partition 2 {{ append_partition_2_guid }} files/2-Boot-NoEmul.img
+            -appended_part_as_gpt -iso_mbr_part_type {{ iso_mbr_part_type }} -c
+            '{{ boot_catalog }}' -b '{{ eltorito_img }}' -no-emul-boot
+            -boot-load-size 4 -boot-info-table --grub2-boot-info
+            -eltorito-alt-boot -e '{{ appended_partition_2_interval }}'
+            -no-emul-boot -o {{ dest_path }}/{{ image_name }}
+            /mnt/modified_content
+    - name: Set permissions to 755 for autoinstall.iso
+      file:
+        path: '{{ dest_path }}/{{ image_name }}'
+        mode: '0755'

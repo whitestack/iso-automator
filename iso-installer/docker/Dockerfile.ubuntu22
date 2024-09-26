@@ -1,0 +1,35 @@
+FROM ubuntu:22.04
+
+ARG ISO_AUTOMATOR_RELEASE
+
+ENV container docker
+ENV LANG en_US.UTF-8
+ENV TERM xterm
+ENV ISO_IMAGE_VERSION ubuntu-22
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ansible apt-utils dnsmasq \
+    gpg gnupg-agent initramfs-tools-core \
+    iputils-ping less nano \
+    net-tools openssl p7zip-full \
+    python3 python3-apt python3-chardet \
+    python3-debian python3-minimal python3-pip \
+    python3-setuptools python3-dracclient \
+    rsync squashfs-tools sudo \
+    tree udev vim wget xorriso gdebi-core
+
+RUN gpg-agent --daemon
+
+RUN pip3 install \
+    bs4 click lxml \
+    pyyaml python-dracclient python-hpilo \
+    requests wheel wget pynetbox
+
+WORKDIR /root
+COPY root/files /root/.
+COPY packages /root/
+
+# livefs_editor tool
+RUN pip3 install /root/livefs_edit-0.0.4-py3-none-any.whl
+
+CMD ["/usr/bin/python3", "-u", "/root/iso_installer.py"]

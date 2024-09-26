@@ -1,0 +1,10 @@
+- hosts: 127.0.0.1
+  vars_files:
+    - vars/vars.yml
+  tasks:
+    - name: Create GRUB file based on Ubuntu version
+      template:
+        src: "template/grub-{{ iso_version }}.j2"
+        dest: /mnt/modified_content/boot/grub/grub.cfg
+        mode: 600
+      when: iso_version in ["ubuntu-20", "ubuntu-22"]

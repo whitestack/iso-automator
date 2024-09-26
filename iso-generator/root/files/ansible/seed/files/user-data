@@ -1,0 +1,7 @@
+#cloud-config
+autoinstall:
+    version: 1
+    early-commands:
+      - cp "/cdrom/ws-auto/configs/$(dmidecode -s system-serial-number)/autoinstall.yaml" /autoinstall.yaml
+      - cp /cdrom/ws-auto/configs/clean.py /clean.py
+      - python3 /clean.py

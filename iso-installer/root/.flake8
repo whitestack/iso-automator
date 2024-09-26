@@ -1,0 +1,23 @@
+[flake8]
+ignore =
+        W291,
+        W293,
+        W503,
+        E123,
+        E125,
+        E226,
+        E241,
+# Temporary until code can be reformatted
+        E121,
+        E122,
+        E203,
+        E303,
+        E501
+        W504
+exclude =
+        .git,
+        __pycache__,
+        .tox,
+max-line-length = 200
+show-source = True
+builtins = _

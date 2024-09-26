@@ -1,0 +1,61 @@
+- hosts: 127.0.0.1
+  vars_files:
+    - vars/vars.yml
+  tasks:
+    - name: Create directories
+      file:
+        path: "{{ item }}"
+        state: directory
+        recurse: yes
+      with_items:
+        - "/etc/iso-automator/modified_image"
+        - "/mnt/base_content"
+        - "/mnt/modified_content/ws-auto/repository"
+
+    - name: Checks if ubuntu .iso exists
+      stat:
+        path: "/etc/iso-automator/modified_image/{{ image }}"
+      register: reg_file
+    
+    - debug:
+        msg: "Ubuntu image iso doesn't exist"
+      when: reg_file.stat.exists == False
+
+    - name: Ends playbooks because image doesn't exist
+      meta: end_play
+      when: not reg_file.stat.exists
+
+    - name: Remove previous content
+      file:
+        path: "/mnt/modified_content"
+        state: absent
+
+    - name: Umounts previous mount in /mnt/base_content
+      command: umount /mnt/base_content
+      ignore_errors: true
+    
+    - name: Mounts ubuntu .iso to /mnt
+      command: mount -o loop /etc/iso-automator/modified_image/{{ image }} /mnt/base_content
+
+    - name: Copy .iso content to modified_content
+      command: cp -rT /mnt/base_content /mnt/modified_content
+
+    - name: Umounts /mnt/base_content directory
+      command: umount /mnt/base_content
+      ignore_errors: true
+
+    - name: Copy repository files
+      copy:
+        src: "/root/ansible/iso/files/"
+        dest: "/mnt/modified_content/ws-auto/."
+
+    - name: "Copy kernel files - {{ kernel }}"
+      copy:
+        src: "/etc/iso-automator/{{ kernel }}"
+        dest: "/mnt/modified_content/ws-auto/repository/"
+
+    - name: Copy extra files
+      ignore_errors: true
+      copy:
+        src: "/etc/iso-automator/extra_files"
+        dest: "/mnt/modified_content/ws-auto/repository/"

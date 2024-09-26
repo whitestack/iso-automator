@@ -1,0 +1,8 @@
+[Unit]
+Description=Installation Service
+
+[Service]
+ExecStart=/root/deploy.sh
+
+[Install]
+WantedBy=multi-user.target

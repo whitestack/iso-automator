@@ -1,0 +1,59 @@
+insmod png
+
+if loadfont /boot/grub/font.pf2 ; then
+	set gfxmode=auto
+	insmod efi_gop
+	insmod efi_uga
+	insmod gfxterm
+	terminal_output gfxterm
+fi
+
+background_image /ws-auto/logo/ws_logo.png
+set menu_color_normal=black/black
+set menu_color_highlight=black/black
+{% if dry_run | bool %}
+set timeout=30
+menuentry "LIVE BOOT" {
+	set gfxpayload=keep
+	linux  /casper/vmlinuz quiet fsck.mode=skip ds='nocloud;s=/cdrom/ws-auto/configs/' ---
+	initrd /casper/initrd
+}
+{% elif not manual_installation | bool %}
+set timeout=60
+menuentry "AUTO-INSTL UBUNTU SERVER 20" {
+	set gfxpayload=keep
+	linux  /casper/vmlinuz quiet autoinstall fsck.mode=skip ds='nocloud;s=/cdrom/ws-auto/configs/' ---
+	initrd /casper/initrd
+}
+{% else %}
+set timeout=-1
+{% for server in host_list %}
+menuentry "AUTO-INSTL UBUNTU SERVER 20: {{ server.hostname }}({{ server.management.address }})" {
+	set gfxpayload=keep
+	linux  /casper/vmlinuz quiet autoinstall fsck.mode=skip ds='nocloud;s=/cdrom/ws-auto/configs/{{ server.hostname }}/' ---
+	initrd /casper/initrd
+}
+{% endfor %}
+{% endif %}
+
+menuentry "Install Ubuntu Server 20" {
+	set gfxpayload=keep
+	linux	/casper/vmlinuz   quiet  ---
+	initrd	/casper/initrd
+}
+grub_platform
+if [ "$grub_platform" = "efi" ]; then
+menuentry 'Boot from next volume' {
+	exit 1
+}
+menuentry 'UEFI Firmware Settings' {
+	fwsetup
+}
+fi
+submenu 'Boot and Install with the HWE kernel' {
+menuentry "Install Ubuntu Server" {
+	set gfxpayload=keep
+	linux	/casper/hwe-vmlinuz   quiet  ---
+	initrd	/casper/hwe-initrd
+}
+}

@@ -1,0 +1,97 @@
+#!/bin/bash
+
+{% if item.netplan is defined and item.raw_netplan is not defined %}
+
+    rm -rf /etc/netplan/*
+
+{% for item in item.netplan %}
+
+    # Getting interfaces:
+{% if item.interface_type is defined and item.interface_position is defined %}
+{% if item.interface_type == 'baseboard' %}
+    interfaces_list=($(python3 /root/repository/int_baseboard.py))
+{% elif item.interface_type == 'pci' %}
+    interfaces_list=($(python3 /root/repository/int_pci.py))
+{% endif %}
+{% endif %}
+
+
+    cat << EOF > /etc/netplan/01-netcfg.yaml
+network:
+    version: 2
+    ethernets:
+{% if item.interfaces is defined %}
+{% for intf in item.interfaces %}
+        {{ intf }}: {}
+{% endfor %}
+{% else %}
+{% for position in item.interface_position %}
+        ${interfaces_list[{{ position }}]}: {}
+{% endfor %}
+{% endif %}
+    bonds:
+        {{ item.bond }}:
+{% if item.ip_address is defined and item.netmask is defined %}
+            addresses: ["{{ item.ip_address }}/{{ item.netmask }}"]
+{% endif %}
+{% if item.gateway is defined %}
+            routes:
+              - to: default
+                via: {{ item.gateway }}
+{% endif %}
+{% if item.nameserver is defined %}
+            nameservers:
+                addresses: ["{{ item.nameserver }}"]
+{% endif %}
+            interfaces:
+{% if item.interfaces is defined %}
+{% for intf in item.interfaces %}
+                - {{ intf }}
+{% endfor %}
+{% else %}
+{% for position in item.interface_position%}
+                - ${interfaces_list[{{ position }}]}
+{% endfor %}
+{% endif %}
+            parameters:
+                mode: {{ item.parameters.mode }}
+{% if item.vlans is defined %}
+    vlans:
+{% for vlan in item.vlans %}
+        vlan.{{ vlan.id }}:
+            link: {{ item.bond }}
+            addresses: ["{{ vlan.ip_address }}/{{ vlan.netmask }}"]
+{% if vlan.gateway is defined %}
+            routes:
+              - to: default
+                via: {{ vlan.gateway }}
+{% endif %}
+{% if vlan.nameserver is defined %}
+            nameservers:
+                addresses: ["{{ vlan.nameserver }}"]
+{% endif %}
+{% for key, value in vlan.items() %}
+{# For backwards compatibility #}
+{#Add other VLAN parameters that have not been rendered#}
+{% if key not in ["ip_address", "gateway", "nameserver", "netmask"] %}
+            {{ key }}: {{ value }}
+{% endif %}
+{% endfor %}
+{% endfor %}
+{% endif %}
+EOF
+
+{% endfor %}
+sudo chmod 600 /etc/netplan/01-netcfg.yaml
+sudo netplan apply
+{% else %}
+{# New raw_netplan with templating #}
+rm -rf /etc/netplan/*
+cat << EOF > raw_netplan_template.yaml
+{{ item.raw_netplan | to_nice_yaml }}
+EOF
+
+python3 /root/repository/netplan_renderer.py --input raw_netplan_template.yaml --output /etc/netplan/01-netcfg.yaml
+sudo chmod 600 /etc/netplan/01-netcfg.yaml
+sudo netplan apply
+{% endif %}

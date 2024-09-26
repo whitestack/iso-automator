@@ -1,0 +1,2 @@
+dest_path: "/etc/iso-automator/nginx"
+image_name: "autoinstall.iso"

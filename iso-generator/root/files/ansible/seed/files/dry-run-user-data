@@ -1,0 +1,7 @@
+#cloud-config
+runcmd:
+  - mkdir -p /root/repository
+  - cp "/cdrom/ws-auto/configs/$(dmidecode -s system-serial-number)/netplan_generator.sh" /root/netplan_generator.sh
+  - cp /cdrom/ws-auto/repository/*.py /root/repository/
+  - chmod +x /root/netplan_generator.sh
+  - /root/netplan_generator.sh

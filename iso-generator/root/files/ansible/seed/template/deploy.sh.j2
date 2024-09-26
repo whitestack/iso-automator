@@ -1,0 +1,288 @@
+#!/bin/bash
+
+############
+# BMC
+############
+
+{% if item.bmc is defined %}
+{% if item.bmc.channel is defined and item.bmc.network is defined%}
+
+{% if item.bmc.network.mode is defined %}
+ipmitool lan set {{ item.bmc.channel }} ipsrc {{ item.bmc.network.mode }}
+{% endif %}
+
+{% if item.bmc.network.mode  == "static" %}
+ipmitool lan set {{ item.bmc.channel }} ipaddr {{ item.bmc.network.address }}
+ipmitool lan set {{ item.bmc.channel }} netmask {{ item.bmc.network.netmask }}
+{% endif %}
+
+
+{% if item.bmc.network.gateway is defined %}
+ipmitool lan set {{ item.bmc.channel }} defgw ipaddr {{ item.bmc.network.gateway }}
+{% endif %}
+
+
+{% if item.bmc.network.vlan is defined %}
+ipmitool lan set {{ item.bmc.channel }} vlan id {{ item.bmc.network.vlan }}
+{% endif %}
+
+{% for user in item.bmc.users %}
+ipmitool user set name {{ loop.index + 3 }} {{ user.name }}
+ipmitool user set password {{ loop.index + 3 }} {{ user.password }}
+ipmitool user enable {{ loop.index + 3 }}
+ipmitool channel setaccess {{ item.bmc.channel }} {{ loop.index + 3 }} privilege={{ user.privilege }}
+{% endfor %}
+
+
+{% if item.bmc.power_policy is defined %}
+ipmitool chassis policy {{ item.bmc.power_policy }}
+{% endif %}
+
+{% endif %}
+{% endif %}
+
+############
+# BIOS
+############
+
+model_server=$(sudo dmidecode -s system-product-name)
+
+if [[ $model_server == *"ProLiant"* ]]; then
+    # Exports HP Bios settings
+    conrep -s -f /tmp/hp_bios.dat
+
+    # SRIOV
+    sed -i '/SR-IOV/ s/Disabled/Enabled/g' /tmp/hp_bios.dat
+
+    # Virtualization
+    sed -i '/Intel_VT/ s/Disabled/Enabled/g' /tmp/hp_bios.dat
+
+    # HyperThreading
+    sed -i '/Intel_Hyper-Threading/ s/Disabled/Enabled/g' /tmp/hp_bios.dat
+
+    # Uploads new bios settings
+    conrep -l -f /tmp/hp_bios.dat
+
+fi
+
+if [[ $model_server == *"PowerEdge"* ]]; then
+    # SRIOV
+    racadm set biOS.integratedDevices.sriovGlobalEnable Enabled
+
+    # HyperThreading
+    racadm set BIOS.ProcSettings.LogicalProc Enabled
+
+    # Virtualization
+    racadm set BIOS.ProcSettings.ProcVirtualization Enabled
+
+    # Creating a job
+    racadm jobqueue create BIOS.Setup.1-1
+
+fi
+
+######################
+# Disable IPv6
+######################
+cat << EOF > /etc/sysctl.conf
+net.ipv6.conf.all.disable_ipv6=1
+net.ipv6.conf.default.disable_ipv6=1
+net.ipv6.conf.lo.disable_ipv6=0
+EOF
+
+sysctl -p
+
+############
+# Netplan
+############
+
+source /root/netplan_generator.sh
+
+############
+# Kernel
+############
+
+{% if item.kernel_options is defined %}
+# Hugepages
+{% if item.kernel_options.hugepages is defined %}
+
+{% if item.kernel_options.hugepages.number is defined and item.kernel_options.hugepages.size is defined%}
+echo 'GRUB_CMDLINE_LINUX="$GRUB_CMDLINE_LINUX default_hugepagesz={{ item.kernel_options.hugepages.size }} hugepagesz={{ item.kernel_options.hugepages.size }} hugepages={{ item.kernel_options.hugepages.number }} {% if item.kernel_options.hugepages.transparent is defined and  item.kernel_options.hugepages.transparent == 'never' %}transparent_hugepage=never{% endif %}"' | tee -a /etc/default/grub
+
+echo 'GRUB_CMDLINE_LINUX="$GRUB_CMDLINE_LINUX iommu=pt intel_iommu=on"' | tee -a /etc/default/grub
+
+update-grub
+{% endif %}
+
+{% endif %}
+
+# DPDK
+{% if item.kernel_options.dpdk is defined %}
+
+{% if item.kernel_options.dpdk.isolated_cpus is defined %}
+echo 'GRUB_CMDLINE_LINUX="$GRUB_CMDLINE_LINUX isolcpus={{ item.kernel_options.dpdk.isolated_cpus }}"' | tee -a /etc/default/grub
+{% endif %}
+
+{% if item.kernel_options.dpdk.modules is defined %}
+{% for module in item.kernel_options.dpdk.modules %}
+echo '{{ module }}' | tee -a /etc/modules-load.d/{{ module }}.conf
+{% endfor%}
+{% endif %}
+
+{% if item.kernel_options.dpdk.max_map_count is defined %}
+echo 'vm.max_map_count={{ item.kernel_options.dpdk.max_map_count }}' | tee -a /etc/sysctl.d/98-whitecloud.conf
+
+sysctl -p
+{% endif %}
+
+update-grub
+
+{% endif %}
+
+# Upgrade Kernel
+{% if item.kernel_options.version is defined %}
+dpkg -i /root/repository/kernel-{{ item.kernel_options.version }}/*.deb
+apt-get --fix-broken install -y
+{% endif %}
+
+{% endif %}
+
+#############
+# EFI BOOTMGR
+#############
+
+{% for item in item.storage %}
+
+{% if item.boot is defined and item.raid_type is defined and item.boot == 'uefi' %}
+
+#Gets the name of vg, if the string has one hyphen, ubuntu changes with a double hyphen. (https://unix.stackexchange.com/questions/319877/doubled-hyphens-in-lvm-dev-mapper-names)
+vg_name_arr=($(sudo lvdisplay -C -o "lv_path" 2> /dev/null | grep dev | awk -F '/' '{print $3 }' | sed 's/-/--/g'))
+echo "VG Names: ${vg_name_arr[*]}" >> /root/logsefi.txt
+# Gets the name of lv
+lv_names_arr=($(sudo lvdisplay -C -o "lv_path" 2> /dev/null | grep dev | awk -F '/' '{print $4 }'))
+echo "LV Names: ${lv_names_arr[*]}" >> /root/logsefi.txt
+# Checks if the vg and lv are mounted in root (/)
+for i in "${!vg_name_arr[@]}"; do
+    temp=(${vg_name_arr[$i]}-${lv_names_arr[$i]})
+    echo "Checking VG and LV mounted at root: ${temp}" >> /root/logsefi.txt
+    if sudo mount | grep -E "on / [a-z]" | grep $temp
+    then
+        vg_name_root_temp=(${vg_name_arr[$i]})
+        vg_name_root=$(echo "$vg_name_root_temp" | sed 's/--/-/g')
+        lv_name_root=(${lv_names_arr[$i]})
+        echo "Root VG and LV: $vg_name_root, $lv_name_root" >> /root/logsefi.txt
+    fi
+done
+
+# Finds md of the root's vg
+md_name_root=$(sudo pvs 2> /dev/null | grep " $vg_name_root " | awk '{print $1}')
+echo "MD Name Root: $md_name_root" >> /root/logsefi.txt
+# Finds the first disk of efi partition
+first_disk_efi=$(sudo lsblk -o PATH,MOUNTPOINT | grep "/boot/efi" | awk '{print $1}')
+echo "First Disk EFI: $first_disk_efi" >> /root/logsefi.txt
+
+# Finds other disks that have efi partition
+list_disk_arr=$(sudo fdisk -l | grep "EFI System" | grep -v $first_disk_efi | awk '{print $1}')
+echo "Other EFI Disks: ${list_disk_arr[*]}" >> /root/logsefi.txt
+
+# Copies the content of the first disk to other efi disks
+for i in "${!list_disk_arr[@]}"; do
+    echo "Copied EFI content from $first_disk_efi to ${list_disk_arr[$i]}" >> /root/logsefi.txt
+    sudo dd if=$first_disk_efi of=${list_disk_arr[$i]}
+done
+
+# Gets all the disks names
+list_all_disk_arr=($(sudo lsblk -o NAME,TYPE | grep disk | awk '{print $1}'))
+echo "All Disks: ${list_all_disk_arr[*]}" >> /root/logsefi.txt
+
+count=0
+# Logic to find which disks are in the mdadm's array.
+# loop in all disks array
+for i in "${!list_all_disk_arr[@]}"; do
+    # loop in all disks that have efi partition
+    for j in "${!list_disk_arr[@]}"; do
+
+        # Getting the name of the disk (without /dev)
+        disk_temp=$(echo ${list_disk_arr[$j]} | awk -F '/dev/' '{print $2}')
+
+        if [[ $disk_temp == *"${list_all_disk_arr[$i]}"* ]]; then
+
+            let count++
+            # Adding new disks to the efibootmgr
+            sudo efibootmgr -c -d /dev/${list_all_disk_arr[$i]} -p 1 -L ubuntu$count -l \EFI\ubuntu\shimx64.efi
+            echo "Added EFI boot manager entry for /dev/${list_all_disk_arr[$i]} as ubuntu$count" >> /root/logsefi.txt
+        fi
+
+    done
+
+done
+
+{% endif %}
+
+{% endfor %}
+
+#################
+# Source.list
+#################
+{% if item.apt.source_list is defined %}
+cat << EOF > /etc/apt/sources.list
+{{ item.apt.source_list}}
+EOF
+{% endif %}
+
+#################
+# Proxy APT
+#################
+{% if item.apt.proxy_url is defined %}
+cat << EOF > /etc/apt/apt.conf.d/proxy.conf
+Acquire::http::Proxy "{{ item.apt.proxy_url}}";
+EOF
+{% endif %}
+
+# Avoids execution of the script again
+chmod 200 /root/deploy.sh
+
+#################
+# Final Commands
+#################
+
+cat << EOF > /root/final_commands.sh
+#!/bin/bash
+{% if item.final_commands is defined %}
+{{ item.final_commands }}
+{% endif %}
+{#TODO: remove when user-data and cloud-init issue is resolved#}
+{% if iso_version is defined and iso_version == "ubuntu-22" %}
+############
+# Adding ssh authorized keys
+############
+{% for item in item.users %}
+{% for ssh_key in item.authorized_keys %}
+echo "{{ ssh_key }}" >> /home/{{ item.name }}/.ssh/authorized_keys
+{% endfor %}
+{% endfor %}
+{% endif %}
+EOF
+
+chmod +x /root/final_commands.sh
+
+/root/final_commands.sh
+
+#################
+# Disabling account
+#################
+{% if item.management.type == 'idrac' %}
+racadm vmdisconnect
+{% elif item.management.type == 'ilo' %}
+hponcfg -f /root/hp_user.xml
+{% endif %}
+
+###############################
+## Disable Unattended Upgrades
+###############################
+sed -i 's/Upgrade "1"/Upgrade "0"/g'  /etc/apt/apt.conf.d/20auto-upgrades
+systemctl disable --now apt-daily.timer
+systemctl disable --now apt-daily-upgrade.timer
+systemctl daemon-reload
+
+# Reboot the server
+reboot

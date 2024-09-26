@@ -1,0 +1,85 @@
+- hosts: 127.0.0.1
+  vars_files:
+    - vars/vars.yml
+  tasks:
+
+    - name: Creates directory per host
+      file:
+        path: "/mnt/modified_content/ws-auto/configs/{{ item.management.serial | default(item.hostname) }}"
+        state: directory
+      loop:
+        "{{ host_list }}"
+
+    - name: Creates meta-data file (manual install case)
+      ansible.builtin.file:
+        path: "/mnt/modified_content/ws-auto/configs/{{ item.hostname }}/meta-data"
+        state: touch
+      loop: "{{ host_list }}"
+      when: manual_installation
+
+    - name: Creates meta-data files (autoinstall-case)
+      ansible.builtin.file:
+        path: "/mnt/modified_content/ws-auto/configs/meta-data"
+        state: touch
+      when: not manual_installation
+
+    - name: Creates user-data (autoinstall-case)
+      copy:
+        src: user-data
+        dest: /mnt/modified_content/ws-auto/configs/user-data
+      when:
+      - not manual_installation
+      - not dry_run
+
+    - name: Handle user-data and autoinstall files creation
+      template:
+        src: "template/autoinstall-{{ iso_version }}.j2"
+        dest: "/mnt/modified_content/ws-auto/configs/{{ item.management.serial | default(item.hostname) }}/{{ 'user-data' if manual_installation else 'autoinstall.yaml' }}"
+      loop: "{{ host_list }}"
+      when:
+        - iso_version in ['ubuntu-20', 'ubuntu-22']
+
+    - name: Creates user-data (dry-run case)
+      copy:
+        src: dry-run-user-data
+        dest: "/mnt/modified_content/ws-auto/configs/user-data"
+      when: dry_run
+
+    - name: Creates netplan_generator.sh script per host
+      template:
+        src: template/netplan_generator.sh.j2
+        dest: /mnt/modified_content/ws-auto/configs/{{ item.management.serial | default(item.hostname) }}/netplan_generator.sh
+      loop:
+        "{{ host_list }}"
+
+    - name: Creates deploy script per host
+      template:
+        src: template/deploy.sh.j2
+        dest: /mnt/modified_content/ws-auto/configs/{{ item.management.serial | default(item.hostname) }}/deploy.sh
+      loop:
+        "{{ host_list }}"
+
+    - name: Creates hponcfg files per host
+      when: item.management is defined
+      template:
+        src: template/hp_user.xml.j2
+        dest: /mnt/modified_content/ws-auto/configs/{{ item.management.serial | default(item.hostname) }}/hp_user.xml
+      loop:
+        "{{ host_list }}"
+
+    - name: Copies remove lv and md
+      copy:
+        src: clean.py
+        dest: /mnt/modified_content/ws-auto/configs/clean.py
+
+    - name: Copies python scripts for netplan templating
+      copy:
+        src: "{{ item }}"
+        dest: /mnt/modified_content/ws-auto/repository/
+      with_fileglob: "*.py"
+
+
+    - name: Copy configs for debugging
+      ansible.builtin.copy:
+        src: /mnt/modified_content/ws-auto/configs/
+        dest: /etc/iso-automator/debug
