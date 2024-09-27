@@ -9,7 +9,7 @@ export crt_file="${CERT_DIR}/tls.crt"
 set -e
 
 if [ ! -f "$key_file" ] && [ ! -f "$crt_file" ]; then
-  openssl req -x509 -nodes -days 365 -newkey rsa:2048 -keyout ${key_file} -out ${crt_file} -subj "/C=PE/ST=LIMA/L=LIMA/O=WhiteStack/CN=IsoAutomator"
+  openssl req -x509 -nodes -days 365 -newkey rsa:2048 -keyout ${key_file} -out ${crt_file} -subj "/C=PE/ST=LIMA/L=LIMA/O=Organization/CN=IsoAutomator"
   openssl dhparam -out "${CERT_DIR}/dhparam.pem" 2048
 fi
 

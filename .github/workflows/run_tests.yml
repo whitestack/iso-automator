@@ -1,0 +1,21 @@
+name: Run Python Linter Tests
+
+on:
+  pull_request:
+    branches:
+      - '**'  # any branch
+  push:
+    branches:
+      - '**'  # any branch
+
+jobs:
+  run-linter-test:
+    runs-on: ubuntu-20.04
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Run iso-generator tests
+      run: cd iso-generator && ./run_tests.sh
+
+    - name: Run iso-installer tests
+      run: cd iso-installer && ./run_tests.sh

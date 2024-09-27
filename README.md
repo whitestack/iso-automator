@@ -69,7 +69,7 @@ The Ubuntu 22.04 Live Server image can be downloaded from the following [link](h
 
 ### Kernel
 
-ISO-Automator allows installing a specific version of the kernel 
+ISO-Automator allows installing a specific version of the kernel
 
 Kernel files must be located in `/etc/iso-automator/kernel-vX.X.X`.
 
@@ -312,7 +312,7 @@ If you wish to re-enable privileges to add an ISO image via URL as virtual media
 ```
 01-Feb-23 18:25:13.453 ERROR: Sets virtual media url to iso-automator NGINX for all ILO's servers.
 01-Feb-23 18:25:14.509 ERROR: Inserting virtual media in the host COMPUTE-1 to URL http://10.218.13.157/autoinstall.iso
-ERROR: The user whitestack of the host COMPUTE-1 doesn't have the privilege VIRTUAL_MEDIA_PRIV. This is a 
+ERROR: The user ubuntu of the host COMPUTE-1 doesn't have the privilege VIRTUAL_MEDIA_PRIV. This is a 
 protection mechanism. DO NOT ACTIVATE THIS PRIVILEGE UNLESS YOU KNOW WHAT YOU'RE DOING.
 ```
 

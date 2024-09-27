@@ -2,8 +2,6 @@ FROM ubuntu:20.04
 
 ARG ISO_AUTOMATOR_RELEASE
 
-LABEL WhiteStack=https://www.whitestack.com
-
 ENV container docker
 ENV LANG en_US.UTF-8
 ENV TERM xterm

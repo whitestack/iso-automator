@@ -28,14 +28,14 @@
 
 # Registers:
 ""1	LINE	0
-	background_image /boot/grub/ws_logo.png
-|3,1,1,1,1,0,1660932468,"background_image /boot/grub/ws_logo.png"
+	background_image /boot/grub/logo_white.png
+|3,1,1,1,1,0,1660932468,"background_image /boot/grub/logo_white.png"
 "2	LINE	0
-	background_image /boot/grub/ws_logo.png
-|3,0,2,1,1,0,1660931976,"background_image /boot/grub/ws_logo.png"
+	background_image /boot/grub/logo_white.png
+|3,0,2,1,1,0,1660931976,"background_image /boot/grub/logo_white.png"
 "3	LINE	0
-	background_image /boot/grub/ws_logo.png
-|3,0,3,1,1,0,1660931958,"background_image /boot/grub/ws_logo.png"
+	background_image /boot/grub/logo_white.png
+|3,0,3,1,1,0,1660931958,"background_image /boot/grub/logo_white.png"
 
 # File marks:
 '0  201  8  /mnt/modified_content/ws-auto/configs/PIS-BRC1-512/user-data
