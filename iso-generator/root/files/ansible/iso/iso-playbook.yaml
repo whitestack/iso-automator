@@ -16,7 +16,7 @@
       stat:
         path: "/etc/iso-automator/modified_image/{{ image }}"
       register: reg_file
-    
+
     - debug:
         msg: "Ubuntu image iso doesn't exist"
       when: reg_file.stat.exists == False
@@ -33,7 +33,7 @@
     - name: Umounts previous mount in /mnt/base_content
       command: umount /mnt/base_content
       ignore_errors: true
-    
+
     - name: Mounts ubuntu .iso to /mnt
       command: mount -o loop /etc/iso-automator/modified_image/{{ image }} /mnt/base_content
 

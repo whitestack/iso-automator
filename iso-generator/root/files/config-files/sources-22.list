@@ -1,0 +1,2 @@
+deb [signed-by=/etc/apt/keyrings/dell.gpg] http://linux.dell.com/repo/community/openmanage/11010/jammy jammy main
+deb [signed-by=/etc/apt/keyrings/hpe.gpg] http://downloads.linux.hpe.com/SDR/repo/mcp jammy/current non-free

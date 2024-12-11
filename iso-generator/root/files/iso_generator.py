@@ -1,18 +1,18 @@
-import shutil
-import yaml
 import argparse
-import os
 import logging
+import os
+
 import livefs_edit
-from livefs_edit import __main__  # noqa: F401
 import requests
+import yaml
+from livefs_edit import __main__  # noqa: F401
 from requests.packages.urllib3.exceptions import InsecureRequestWarning
 from utils.utils_iso_automator import (
     ansible_playbook,
-    write_dict_to_ansible_vars,
-    render_jinja_template,
     process_server,
+    render_jinja_template,
     validate_kernel,
+    write_dict_to_ansible_vars,
 )
 
 requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
@@ -25,13 +25,22 @@ ISO_BASE_PATH = f"{ISO_AUTOMATOR_PATH}/base_image"
 ISO_IMAGE_VERSION = os.getenv("ISO_IMAGE_VERSION")
 # Default package and repository configurations
 DEFAULT_PACKAGES = {
-    "apt": ["hp-scripting-tools", "hponcfg", "srvadmin-idracadm8", "python3-pip"],
+    "apt": [
+        # TODO: 3rd party repositories not supported
+        # "hp-scripting-tools",
+        # "hponcfg",
+        # "srvadmin-idracadm8",
+        "python3-pip",
+        "dmidecode",
+        "sysstat",
+        "ipmitool",
+        "ethtool",
+        "lldpd",
+        "network-manager",
+    ],
     "pip": ["jc"],
     "deb": [],
-    "repositories": [
-        "deb [trusted=yes] http://downloads.linux.hpe.com/SDR/repo/stk focal/current non-free",
-        "deb [trusted=yes] http://downloads.linux.hpe.com/SDR/repo/mcp bionic/current non-free",
-    ],
+    "repositories": [],
 }
 
 
@@ -107,27 +116,15 @@ def generate_iso_with_apt(content_servers):
     if not os.path.exists(ISO_MODIFIED_PATH):
         os.makedirs(ISO_MODIFIED_PATH)
 
-    if "packages" not in content_servers["configuration"]["default"]:
-        if not os.path.exists(iso_livefs_output):
-            shutil.copy2(iso_livefs_input, iso_livefs_output)
-        logging.info("There are not new packages to add ...")
-        logging.info("Skip ISO generation with APT ...")
-        return
-
-    # Dell repository URLs based on the ISO image version
-    dell_repositories = {
-        "ubuntu-20": "deb [trusted=yes] http://linux.dell.com/repo/community/openmanage/950/focal focal main",
-        "ubuntu-22": "deb [trusted=yes] http://linux.dell.com/repo/community/openmanage/11010/jammy jammy main",
-    }
     # User configuration from servers.yml
     user_packages = content_servers["configuration"]["default"]["packages"]
     # Prepare data for the template
     data = dict()
     for key, value in DEFAULT_PACKAGES.items():
-        data[key + "_list"] = list(set(value + user_packages.get(key, [])))
-
-    # Append the corresponding Dell repository based on the ISO version
-    data["repositories_list"].append(dell_repositories[ISO_IMAGE_VERSION])
+        packages = []
+        if user_packages.get("use_default_packages", True):
+            packages = value
+        data[key + "_list"] = list(set(packages + user_packages.get(key, [])))
 
     logging.info("Generating config.j2 for livefs_editor")
     render_jinja_template("/root/templates/config.j2", "/root/config.yaml", data)

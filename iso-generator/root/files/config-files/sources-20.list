@@ -1,0 +1,2 @@
+deb [signed-by=/etc/apt/keyrings/dell.gpg] http://linux.dell.com/repo/community/openmanage/950/focal focal main
+deb [signed-by=/etc/apt/keyrings/hpe.gpg] http://downloads.linux.hpe.com/SDR/repo/stk focal/current non-free

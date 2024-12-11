@@ -168,13 +168,28 @@ autoinstall:
           device: {{ lv.name }}-format
 {% endfor %}
 {% endfor %}
+{% if item.packages.apt|length > 0 %}
+    packages:
+{% for package in item.packages.apt %}
+    - {{ package }}
+{% endfor %}
+{% endif %}
     late-commands:
         - cp /cdrom/ws-auto/configs/{{ item.management.serial | default(item.hostname) }}/deploy.sh /target/root/.
         - cp /cdrom/ws-auto/configs/{{ item.management.serial | default(item.hostname) }}/netplan_generator.sh /target/root/.
 {% if item.management is defined and item.management.type == 'ilo' %}
         - cp /cdrom/ws-auto/configs/{{ item.management.serial | default(item.hostname) }}/hp_user.xml /target/root/.
 {% endif %}
-        - cp -r /cdrom/ws-auto/repository /target/root/.
+        - cp -r /cdrom/ws-auto/repository /target/root/
+{% if item.packages.deb|length > 0 %}
+        - cp -r /cdrom/ws-auto/configs/{{ item.management.serial | default(item.hostname) }}/debs /target/root/
+        - curtin in-target --target=/target -- dpkg -i -R /root/debs
+        - rm -rf /target/root/debs
+{% endif %}
+{% if "network-manager" in item.packages.apt %}
+        - curtin in-target --target=/target -- systemctl disable ModemManager.service
+        - curtin in-target --target=/target -- systemctl disable wpa-supplicant.service
+{% endif %}
         - curtin in-target --target=/target -- cp /root/repository/temp.service /etc/systemd/system/.
         - curtin in-target --target=/target -- chmod +x /root/deploy.sh /root/netplan_generator.sh
         - curtin in-target --target=/target -- systemctl enable temp.service

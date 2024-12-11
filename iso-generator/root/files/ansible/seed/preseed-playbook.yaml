@@ -78,6 +78,22 @@
         dest: /mnt/modified_content/ws-auto/repository/
       with_fileglob: "*.py"
 
+    - name: Copies deb files to install with autoinstall
+      copy:
+        src: "{{ item.deb }}"
+        dest: "/mnt/modified_content/ws-auto/configs/{{ item.host }}/debs/"
+      # Nested loop, ref: https://www.reddit.com/r/ansible/comments/14k9vr1/comment/jpq4aen
+      loop: >-
+        {%- set items = [] -%}
+        {%- for host in host_list -%}
+        {%- for deb in host.packages.deb -%}
+        {%- set _ = items.append({
+          "deb": deb,
+          "host": host.management.serial | default(host.hostname)
+        }) -%}
+        {%- endfor -%}
+        {%- endfor -%}
+        {{ items }}
 
     - name: Copy configs for debugging
       ansible.builtin.copy:

@@ -2,25 +2,41 @@
 - arg: autoinstall
   name: add-cmdline-arg
   persist: false
+
+# Add network-manager configuracion if network-manager will be installed
+{% if "network-manager" in apt_list %}
+- name: cp
+  source: /root/config-files/network-manager-config.conf
+  dest: '$LAYERS[0]/etc/NetworkManager/conf.d/99-whitestack.conf'
+{% endif %}
+
+# Adds gpg pubkeys and sources for HPE, DELL repositories (currently not working)
+- name: cp
+  source: /root/config-files/dell.gpg
+  dest: '$LAYERS[0]/etc/apt/keyrings/dell.gpg'
+- name: cp
+  source: /root/config-files/hpe.gpg
+  dest: '$LAYERS[0]/etc/apt/keyrings/hpe.gpg'
+- name: cp
+  source: /root/config-files/sources-20.list
+  dest: '$LAYERS[0]/etc/apt/sources.list.d/whitestack.list'
+
+{% if pip_list|length > 0 %}
+# Install python3-pip in installer environment to install python packages to the target system
+- name: install-packages
+  packages:
+  - python3-pip
 - name: install-pip-packages
   packages:
     {% for pip in pip_list %}
     - {{ pip }}
     {% endfor %}
-- name: add-apt-repository
-  repositories:
-    {%  for repo in repositories_list %}
-    - {{ repo }}
-    {%  endfor %}
-- name: install-packages
+{% endif %}
+
+{% if apt_list|length > 0 %}
+- name: add-packages-to-pool
   packages:
-    {% for apt in apt_list %}
-    - {{ apt }}
-    {% endfor %}
-{% if deb_list|length > 0 %}
-- name: install-debs
-  debs:
-    {% for deb in deb_list %}
-    - {{ deb }}
-    {% endfor %}
+{% for apt in apt_list %}
+  - {{ apt }}
+{% endfor %}
 {% endif %}
